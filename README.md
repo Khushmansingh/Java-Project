@@ -1,66 +1,125 @@
-# F1 Team Management & Transfer Market System
+# Sportify Tournament Manager
 
-Small Java 17 console project using MySQL and JDBC.
+Sportify is a learner-oriented Java console project for managing one football, cricket, or kabaddi tournament. It demonstrates object-oriented models, collections, synchronized threads, a producer-consumer result queue, JDBC/MySQL persistence, streams, and CSV file handling.
 
-## MySQL setup
+## Requirements and setup
 
-1. Install MySQL Server. The project includes MySQL Connector/J in the `lib` folder.
-2. Run `schema.sql` in MySQL Workbench or with `mysql -u root -p < schema.sql`.
-3. Open `src/Database.java` and set `URL`, `USER`, and `PASSWORD` for your local MySQL account. The default URL is `jdbc:mysql://localhost:3306/f1_management`, the user is `root`, and the sample password is `password`.
+- JDK 17 or newer (the project was compiled here with JDK 27).
+- MySQL 8.0 or newer.
+- MySQL Connector/J on the compile and runtime classpaths.
 
-The schema inserts three repeatable example drivers and the Red Falcon team. The application reads demo data from MySQL; it does not create the story data in memory.
-
-## Compile and run
-
-Windows PowerShell example (replace the JAR path as needed):
+1. Run `sql/sportify_schema.sql` in MySQL. The script recreates the Sportify tables and inserts the demo data.
+2. Set `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` in `src/database/DBConnection.java` to your MySQL connection details. Select the tournament sport with `-Dsportify.sport=FOOTBALL`, `CRICKET`, or `KABADDI`.
+3. Compile and run from the project root (replace the connector path with your installed JAR):
 
 ```powershell
-javac -cp ".;lib\mysql-connector-j-26.10.0.jar" -d out src\*.java
-java -cp "out;lib\mysql-connector-j-26.10.0.jar" Main
+javac -cp "lib/mysql-connector-j.jar" -d out (Get-ChildItem src -Recurse -Filter *.java | ForEach-Object FullName)
+java -cp "out;lib/mysql-connector-j.jar" main.SportifyApp
 ```
 
-On macOS/Linux use `:` instead of `;` in the classpath and `/` in place of the Windows path separators. Run the schema once before starting the program. CSV import reads a path entered at the prompt; `drivers.csv` is included as a sample. Java source is in `src`, the JDBC library is in `lib`, and compiled classes go in `out`.
+The schema seeds username `admin` with password `sportify123`; the stored value is a salted PBKDF2 hash. Change it for any real use. The SQL script seeds football teams T01–T04, venue V01, 44 players, and matches M101–M103. M102 is a 0–0 draw; M101 and M103 are scheduled. M103 is on a separate date so T01 does not play twice on one day.
 
-## Example workflow
+## Assumptions
 
-Run the schema, start Main, create an offer for team 1 with minimum rating 80, a future deadline, and salary/transfer amounts within the team budget. Check IDs 1, 2, and 3 for eligibility. IDs 1 and 2 should pass and ID 3 should fail. Submit requests for IDs 1 and 2, shortlist the request for ID 1, then sign it. Signing updates the driver's team, subtracts salary and transfer amount from the team budget, and updates the request in one transaction. The team has two seats; use a second signed driver to fill its remaining seat.
+- Squad size is at most 25; players are 14–50 years old; jersey numbers are 1–99.
+- Player IDs, team IDs, venue IDs, and match IDs are provided by the administrator and are unique.
+- One match uses a date plus exact start time as its venue slot. The app checks teams against all scheduled matches on the same date.
+- The captain must be a player on that team. The schema's captain foreign key is added after the players table to resolve the teams/players circular reference; create teams, create players, then set captains.
+- Score difference is the simple total score difference. It is a teaching substitute for cricket net run rate.
+- MVP is the player with the largest sum of `score_contribution` in completed match stats. Cricket and kabaddi use the same stored contribution field; the display label comes from the selected sport rules.
+- `secondary_contribution` is available for a second stat such as assists, wickets, or tackles. Leaderboard ordering currently uses the primary contribution.
+- CSV import columns are `player_id,name,age,role,jersey_no,team_id`. Blank lines are counted as skipped. Quotes and doubled quotes are supported.
+- The points-table seed reflects M102's 0–0 draw; after M101 is entered as 2–1, expected values are T01 3 (+1), T02 0 (-1), T03 1 (0), T04 1 (0).
 
-Signing is serialized with a transaction and team-row lock. The request uniqueness rule is enforced in MySQL as well as checked by the service.
+## Demo and concepts
 
-## Test sheet
+The SQL setup provides the end-to-end tournament records. Runnable focused demos are:
 
-| ID | Test | Expected result | Actual | Pass/Fail |
-|---|---|---|---|---|
-| T01 | Register a complete driver with rating 0 | Driver is stored | | |
-| T02 | Register a driver with rating above 100 | Validation rejects the driver | | |
-| T03 | Register a second driver with an existing ID | Duplicate ID message | | |
-| T04 | Register email differing only by letter case | Duplicate email message | | |
-| T05 | Search for an absent driver ID | Clear not-found message | | |
-| T06 | Update an existing driver profile | Profile changes without a duplicate | | |
-| T07 | Add a team ID already in use | Duplicate record/database constraint message | | |
-| T08 | Check rating equal to minimum rating | ELIGIBLE | | |
-| T09 | Check rating below minimum rating | NOT ELIGIBLE with reason | | |
-| T10 | Submit request for unfit driver | Request rejected | | |
-| T11 | Submit request after offer deadline | Closed/past-deadline message | | |
-| T12 | Submit the same driver and offer twice | Duplicate request rejected | | |
-| T13 | Transition PENDING to SIGNED directly | Transition rejected | | |
-| T14 | Shortlist, then sign an eligible request | Driver assigned and budget reduced atomically | | |
-| T15 | Import included drivers.csv | Three rows imported, invalid row rejected with row number | | |
-| T16 | Run concurrency demo | At most two reservation successes | | |
+```powershell
+java -cp out main.CollectionsDemo
+java -cp out main.ConcurrencyDemo
+java -cp out main.QueueAndExecutorDemo
+java -cp out main.ModelDemo
+java -cp out main.AnalyticsDemo
+java -cp out main.CsvValidationDemo
+```
 
-## Milestone map
+`SportifyApp` runs the database-backed menu and requires the local MySQL config and Connector/J. `ModelDemo` demonstrates validated model construction and sport-rule polymorphism without a database.
 
-| Milestone | Files |
+For the seeded story, log in as `admin` / `sportify123`, choose option 5 for M101 with score 2–1 and provide the scorers' player IDs and contributions, then choose option 13 to process the queued result. Option 6 should then show T01 3 (+1), T02 0 (-1), T03 1 (0), and T04 1 (0). Option 7 displays scorers and MVP; option 11 can import `data/players.csv` (three valid rows and one invalid-age row), and option 12 writes reports under `reports/`. Run `main.ConcurrencyDemo` to see the five-thread slot contest.
+
+Without synchronization, two booking threads could both see a slot as free before either marks it taken. `VenueSlotManager` protects the check and booking as one critical section on the shared manager. Calling `run()` directly executes on the caller's thread; `start()` creates a new thread. The demo uses `join()` before checking totals and interrupts a sleeping thread to demonstrate interrupt handling.
+
+### Class diagrams
+
+```mermaid
+classDiagram
+    Person <|-- Player
+    SportRules <|.. FootballRules
+    SportRules <|.. CricketRules
+    SportRules <|.. KabaddiRules
+    Team "1" o-- "0..25" Player
+    Match "1" o-- "0..*" MatchStat
+    ResultService --> PointsTableService
+    ResultProducer --> ResultQueue
+    ResultConsumer --> ResultQueue
+    TeamDAO ..|> Repository
+    VenueDAO ..|> Repository
+```
+
+### ER diagram
+
+```mermaid
+erDiagram
+    TEAMS ||--o{ PLAYERS : owns
+    PLAYERS o|--|| TEAMS : captains
+    TEAMS ||--o{ MATCHES : home
+    TEAMS ||--o{ MATCHES : away
+    VENUES ||--o{ MATCHES : hosts
+    MATCHES ||--o{ MATCH_STATS : records
+    PLAYERS ||--o{ MATCH_STATS : earns
+    TEAMS ||--o| POINTS_TABLE : has
+```
+
+### Architecture
+
+```mermaid
+flowchart LR
+    Console --> Services
+    Services --> DAOs
+    Services --> Rules
+    Services --> Collections
+    DAOs --> JDBC
+    JDBC --> MySQL
+    ResultProducer --> ResultQueue
+    ResultQueue --> ResultConsumer
+    ResultConsumer --> Services
+```
+
+## Concepts map
+
+| Concept | Location |
 |---|---|
-| 1 OOP and validation | Driver.java, Team.java, TransferOffer.java, TransferRequest.java, Eligible.java, CustomExceptions.java |
-| 2 Collections | DriverService.java, TransferService.java, ReportService.java |
-| 3 Multithreading | SlotManager.java, TransferTask.java, Main.java |
-| 4 Producer-consumer and executor | TransferTask.java |
-| 5 JDBC and transactions | Database.java, DriverRepository.java, TeamRepository.java, schema.sql |
-| 6 Lambdas and streams | ReportService.java, TransferService.java |
-| 7 Generics and files | Repository.java, DriverRepository.java, TeamRepository.java, CsvHelper.java |
-| 8 Integration | Main.java and all supporting files |
+| Inheritance and overriding | `model/Person.java`, `model/Player.java`, `Player.getDisplayInfo()` |
+| Interface and polymorphism | `rules/SportRules.java`, `rules/*Rules.java` |
+| Validation and custom exceptions | `model/*`, `exception/*` |
+| ArrayList, HashMap, HashSet, Iterator | `service/TeamService.java`, `service/PlayerService.java` |
+| Comparator and streams | `service/PlayerService.java`, `service/PointsTableService.java`, `service/AnalyticsService.java` |
+| Synchronized critical section | `concurrency/VenueSlotManager.java`, `model/PointsEntry.java` |
+| wait/notifyAll producer-consumer | `concurrency/ResultQueue.java` |
+| Executor, Callable, Future | `main/QueueAndExecutorDemo.java` |
+| JDBC and prepared statements | `database/DBConnection.java`, `dao/*DAO.java` |
+| JDBC transaction and rollback | `service/ResultService.recordResultInDatabase()` |
+| Generic repository | `repository/Repository.java`, `dao/TeamDAO.java`, `dao/VenueDAO.java` |
+| BufferedReader/BufferedWriter CSV | `util/CsvImporter.java`, `util/CsvExporter.java` |
 
-## Notes
+## Viva questions
 
-Use only demo or otherwise appropriate credentials in `src/Database.java`. The tables include foreign keys and checks; MySQL 8.0.16+ enforces CHECK constraints.
+- **M1:** Why does `Player` extend `Person`? A player is a person, so it reuses validated name/age data and overrides display output with player details.
+- **M2:** Why use both a list and a map? The list preserves display order; the map gives direct ID lookup.
+- **M3:** What does synchronization protect? The single check-and-add booking operation on the shared venue manager, so two threads cannot both claim one slot.
+- **M4:** Why is `wait()` inside a `while` loop? A thread must recheck the queue condition after waking because another thread may have changed it first.
+- **M5:** Why use a transaction for results? Match score, player stats, and both teams' points must either all persist or all roll back.
+- **M6:** Which stream operations are terminal? `collect`, `average`, and `count`; filter/map/sorted are intermediate.
+- **M7:** Why use a generic repository? The same save/find/list/delete contract works for both team and venue DAOs while keeping entity types checked.
+- **M8:** Why hash admin passwords? A DB leak should not expose passwords directly; the stored value includes a random salt and a slow PBKDF2 derivation.

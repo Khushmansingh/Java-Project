@@ -1,5 +1,0 @@
-driverId,name,nationality,email,rating,salary,marketValue,status
-101,Ava,Canada,ava@example.com,88.5,5000000,12000000,FIT
-102,Noah,Australia,noah@example.com,81.0,4500000,10000000,FIT
-103,Mia,Spain,mia@example.com,76.2,3500000,8000000,INJURED
-bad,Invalid,Nowhere,invalid@example.com,not-a-number,0,0,FIT
